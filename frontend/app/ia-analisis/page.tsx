@@ -1,10 +1,12 @@
 'use client';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import axios from 'axios';
-import { BrainCircuit, ShieldAlert, Loader2, Target, Lightbulb, TrendingUp } from 'lucide-react';
+import { BrainCircuit, ShieldAlert, Loader2, Target, Lightbulb, TrendingUp, ArrowLeft } from 'lucide-react';
 import API_URL from '@/lib/api';
 
 export default function AnalisisIA() {
+  const router = useRouter();
   const [analisis, setAnalisis] = useState("");
   const [cargando, setCargando] = useState(false);
 
@@ -24,6 +26,15 @@ export default function AnalisisIA() {
 
   return (
     <div className="min-h-screen bg-zinc-50 p-12">
+      {/* Botón de regreso */}
+      <button
+        onClick={() => router.push('/')}
+        className="fixed top-5 left-5 flex items-center gap-3 bg-[#001F3F] hover:bg-[#003366] text-white font-black px-6 py-3 rounded-2xl shadow-xl transition-all hover:scale-105 active:scale-95 z-50 text-base"
+      >
+        <ArrowLeft size={18} />
+        <span className="text-sm uppercase tracking-wide">Inicio</span>
+      </button>
+
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-black text-[#001F3F] border-b-4 border-[#800020] mb-8 flex gap-3 items-center uppercase tracking-tighter">
           <BrainCircuit className="text-[#800020]" size={40} /> 

@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Bar } from 'react-chartjs-2';
 import axios from 'axios';
+import { ArrowLeft } from 'lucide-react';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import API_URL from '@/lib/api';
 
@@ -18,6 +20,7 @@ interface GraphConfig {
 }
 
 export default function Estadisticas() {
+  const router = useRouter();
   const [chartData, setChartData] = useState<GraphConfig | null>(null);
 
   // Paleta de colores predefinida (puedes agregar más si tienes muchas categorías)
@@ -58,6 +61,15 @@ export default function Estadisticas() {
 
   return (
     <div className="p-10 bg-zinc-50 min-h-screen flex flex-col items-center text-black">
+      {/* Botón de regreso */}
+      <button
+        onClick={() => router.push('/')}
+        className="fixed top-5 left-5 flex items-center gap-3 bg-[#001F3F] hover:bg-[#003366] text-white font-black px-6 py-3 rounded-2xl shadow-xl transition-all hover:scale-105 active:scale-95 z-50 text-base"
+      >
+        <ArrowLeft size={18} />
+        <span className="text-sm uppercase tracking-wide">Inicio</span>
+      </button>
+
       <h1 className="text-3xl font-black text-[#001F3F] mb-10 border-b-4 border-[#800020] pb-2 uppercase">
         Estadísticas Institucionales
       </h1>
