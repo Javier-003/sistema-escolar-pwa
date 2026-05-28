@@ -22,7 +22,7 @@ from reportlab.lib.enums import TA_CENTER
 from cryptography.fernet import Fernet
 import base64, os
 import io
-import pyotp
+
 # pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 
@@ -84,45 +84,36 @@ Base.metadata.create_all(bind=engine)
 
 # --- AUTO-CREAR ADMIN SI NO EXISTEN USUARIOS ---
 def init_admin():
-    """Crea un usuario admin por defecto si la tabla está vacía."""
     db = SessionLocal()
     try:
         count = db.query(User).count()
         if count == 0:
             admin_user = os.environ.get("ADMIN_USER", "admin")
             admin_pass = os.environ.get("ADMIN_PASS", "admin123")
-            secret = pyotp.random_base32()
-            # Usamos pwd_context (passlib) para hashear, compatible con verify()
             hashed_pw = pwd_context.hash(admin_pass)
             nuevo = User(
                 nombre_usuario=admin_user,
                 password_hash=hashed_pw,
                 rol="admin",
-                otp_secret=secret
+                otp_secret=""  # ya no se usa
             )
             db.add(nuevo)
             db.commit()
             print("=" * 50)
-            print(f"ADMIN CREADO AUTOMÁTICAMENTE")
-            print(f"Usuario: {admin_user}")
-            print(f"OTP Secret: {secret}")
-            print(f"Agrega este secret a Google Authenticator")
+            print(f"ADMIN CREADO: {admin_user}")
             print("=" * 50)
         else:
-            # Si ya existe el admin con hash de bcrypt directo, lo actualizamos
             admin_user = os.environ.get("ADMIN_USER", "admin")
             admin_pass = os.environ.get("ADMIN_PASS", "admin123")
             user = db.query(User).filter(User.nombre_usuario == admin_user).first()
             if user:
                 user.password_hash = pwd_context.hash(admin_pass)
                 db.commit()
-                print(f"[init_admin] Hash del admin actualizado con passlib.")
     except Exception as e:
         print(f"Error al crear/actualizar admin: {e}")
         db.rollback()
     finally:
         db.close()
-
 init_admin()
 
 app = FastAPI()
@@ -146,31 +137,16 @@ def get_db():
 
 @app.post("/registro")
 def registrar_usuario(username: str, password: str, rol: str, db: Session = Depends(get_db)):
-    secret = pyotp.random_base32()
-    nuevo = User(nombre_usuario=username, password_hash=pwd_context.hash(password), rol=rol, otp_secret=secret)
+    nuevo = User(nombre_usuario=username, password_hash=pwd_context.hash(password), rol=rol, otp_secret="")
     db.add(nuevo)
     db.commit()
-    return {"msg": "Usuario creado", "otp_secret": secret}
-
-@app.post("/auth/verificar-2fa")
-async def verificar_otp(payload: dict, db: Session = Depends(get_db)):
-    usuario = db.query(User).filter(User.nombre_usuario == payload['usuario']).first()
-    if not usuario:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    
-    totp = pyotp.TOTP(usuario.otp_secret)
-    if totp.verify(payload['token_otp']):
-        return {"access_token": "TOKEN_EXITOSO_123", "token_type": "bearer", "rol": usuario.rol}
-    else:
-        raise HTTPException(status_code=400, detail="Código incorrecto o expirado")
+    return {"msg": "Usuario creado"}
 
 @app.post("/login")
-def login(username: str, password: str, code_otp: str, db: Session = Depends(get_db)):
+def login(username: str, password: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.nombre_usuario == username).first()
     if not user or not pwd_context.verify(password, user.password_hash):
         raise HTTPException(status_code=400, detail="Datos incorrectos")
-    if not pyotp.TOTP(user.otp_secret).verify(code_otp):
-        raise HTTPException(status_code=400, detail="OTP inválido")
     return {"msg": "Ingreso exitoso", "rol": user.rol}
 
 
