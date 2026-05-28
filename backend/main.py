@@ -1,3 +1,8 @@
+from fastapi import UploadFile
+from fastapi import Form
+
+from fastapi import File
+from fastapi import Response
 from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse
@@ -5,22 +10,34 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy import Column, Integer, String, ForeignKey, LargeBinary
 from passlib.context import CryptContext
 from datetime import datetime
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib import colors
-import pyotp
-import os
+from reportlab.platypus import Paragraph, Table, TableStyle
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.enums import TA_CENTER
+from cryptography.fernet import Fernet
+import base64, os
 import io
+import pyotp
+# pyrefly: ignore [missing-import]
+from dotenv import load_dotenv
+
+
+load_dotenv() 
 
 # 1. Configuración de Base de Datos
 # En producción, usa la variable de entorno DATABASE_URL (PostgreSQL de Render)
 # En desarrollo local, usa MySQL como antes
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
-    "mysql+mysqlconnector://root:Mahemahe2004@localhost/sistema_escolar"
+    "mysql+mysqlconnector://root:123456@localhost/sistema_escolar"
 )
+FERNET_KEY = os.environ.get("FERNET_KEY")
+fernet = Fernet(FERNET_KEY)
 
 # Render usa "postgres://" pero SQLAlchemy necesita "postgresql://"
 if DATABASE_URL.startswith("postgres://"):
@@ -61,6 +78,7 @@ class Inasistencia(Base):
     tipo = Column(String(50), nullable=True)
     observaciones = Column(String(255), nullable=True)
     fecha_registro = Column(String(20))
+    archivo = Column(LargeBinary, nullable=True)
 
 Base.metadata.create_all(bind=engine)
 
@@ -71,15 +89,11 @@ def init_admin():
     try:
         count = db.query(User).count()
         if count == 0:
-            import bcrypt
             admin_user = os.environ.get("ADMIN_USER", "admin")
             admin_pass = os.environ.get("ADMIN_PASS", "admin123")
             secret = pyotp.random_base32()
-            
-            password_bytes = admin_pass.encode('utf-8')
-            salt = bcrypt.gensalt()
-            hashed_pw = bcrypt.hashpw(password_bytes, salt).decode('utf-8')
-            
+            # Usamos pwd_context (passlib) para hashear, compatible con verify()
+            hashed_pw = pwd_context.hash(admin_pass)
             nuevo = User(
                 nombre_usuario=admin_user,
                 password_hash=hashed_pw,
@@ -94,8 +108,17 @@ def init_admin():
             print(f"OTP Secret: {secret}")
             print(f"Agrega este secret a Google Authenticator")
             print("=" * 50)
+        else:
+            # Si ya existe el admin con hash de bcrypt directo, lo actualizamos
+            admin_user = os.environ.get("ADMIN_USER", "admin")
+            admin_pass = os.environ.get("ADMIN_PASS", "admin123")
+            user = db.query(User).filter(User.nombre_usuario == admin_user).first()
+            if user:
+                user.password_hash = pwd_context.hash(admin_pass)
+                db.commit()
+                print(f"[init_admin] Hash del admin actualizado con passlib.")
     except Exception as e:
-        print(f"Error al crear admin: {e}")
+        print(f"Error al crear/actualizar admin: {e}")
         db.rollback()
     finally:
         db.close()
@@ -150,6 +173,12 @@ def login(username: str, password: str, code_otp: str, db: Session = Depends(get
         raise HTTPException(status_code=400, detail="OTP inválido")
     return {"msg": "Ingreso exitoso", "rol": user.rol}
 
+
+@app.post("/logout")
+async def logout(response: Response):
+    response.delete_cookie("access_token")  # si usas cookie
+    return {"msg": "Cierre de sesión exitoso"}
+    
 # --- II. GESTIÓN DE PERSONAL (ACTUALIZADO) ---
 
 @app.post("/personal/crear")
@@ -168,13 +197,15 @@ async def listar_personal(db: Session = Depends(get_db)):
     return db.query(Personal).all()
 
 @app.put("/personal/actualizar/{id}")
-def actualizar_personal(id: int, nombre: str, numero: str, db: Session = Depends(get_db)):
+def actualizar_personal(id: int, nombre: str, numero: str, area: str, curp: str, db: Session = Depends(get_db)):
     docente = db.query(Personal).filter(Personal.id == id).first()
     if not docente:
         raise HTTPException(status_code=404, detail="Docente no encontrado")
     
     docente.nombre_completo = nombre
     docente.numero_empleado = numero
+    docente.area_departamento = area
+    docente.curp = curp
     db.commit()
     return {"status": "success", "message": "Datos actualizados"}
 
@@ -195,17 +226,24 @@ def eliminar_empleado(emp_id: int, db: Session = Depends(get_db)):
 
 @app.post("/inasistencias/registrar")
 async def registrar_inasistencia(
-    personal_id: int, 
-    fecha: str, 
-    horario: str, 
-    motivo: str, 
-    tipo: str = "FALTA", 
-    obs: str = "Sin observaciones",
+    personal_id: int = Form(...), 
+    fecha: str = Form(...), 
+    horario: str = Form(...), 
+    motivo: str = Form(...), 
+    tipo: str = Form("FALTA"), 
+    obs: str = Form("Sin observaciones"),
+    archivo: UploadFile | None = None,
     db: Session = Depends(get_db)
 ):
     docente = db.query(Personal).filter(Personal.id == personal_id).first()
     if not docente: 
         raise HTTPException(status_code=404, detail="El docente no existe")
+
+    # Encriptar el archivo si viene
+    archivo_encriptado = None
+    if archivo:
+        contenido = await archivo.read()
+        archivo_encriptado = fernet.encrypt(contenido)  # bytes encriptados
 
     nueva_falla = Inasistencia(
         personal_id=personal_id, 
@@ -214,12 +252,18 @@ async def registrar_inasistencia(
         motivo=motivo,
         tipo=tipo,
         observaciones=obs,
+        archivo=archivo_encriptado,  # se guarda encriptado
         fecha_registro=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     )
     db.add(nueva_falla)
     db.commit()
     db.refresh(nueva_falla)
     return {"status": "success", "id": nueva_falla.id}
+
+@app.get("/inasistencias/personal/{personal_id}")
+async def listar_inasistencias_personal(personal_id: int, db: Session = Depends(get_db)):
+    inasistencias = db.query(Inasistencia).filter(Inasistencia.personal_id == personal_id).order_by(Inasistencia.id.desc()).all()
+    return inasistencias
 
 @app.get("/inasistencias/reporte/{inasistencia_id}")
 async def generar_reporte_inasistencia(inasistencia_id: int, db: Session = Depends(get_db)):
@@ -231,33 +275,99 @@ async def generar_reporte_inasistencia(inasistencia_id: int, db: Session = Depen
 
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=LETTER)
+    width, height = LETTER
     
-    p.setFillColor(colors.hexColor("#800020"))
-    p.rect(0, 750, 612, 50, fill=True, stroke=False)
-    p.setFillColor(colors.white)
-    p.setFont("Helvetica-Bold", 16)
-    p.drawCentredString(306, 770, "REPORTE DE INASISTENCIA DOCENTE")
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    logo_izq = os.path.join(base_dir, "logos", "logo_secretaria.png")
+    logo_der = os.path.join(base_dir, "logos", "logo.jpg")
     
-    p.setFillColor(colors.black)
-    p.setFont("Helvetica-Bold", 12)
-    p.drawString(50, 700, f"FECHA DE FALTA: {registro.fecha_falta}")
-    p.line(50, 690, 562, 690)
+    if os.path.exists(logo_izq):
+        p.drawImage(logo_izq, 40, height - 100, width=180, height=60, preserveAspectRatio=True, mask='auto')
+    if os.path.exists(logo_der):
+        p.drawImage(logo_der, width - 140, height - 105, width=90, height=70, preserveAspectRatio=True, mask='auto')
+        
+    p.setFillColor(colors.HexColor("#800020"))
+    p.rect(0, height - 160, width, 40, fill=True, stroke=False)
     
-    p.setFont("Helvetica", 12)
-    p.drawString(50, 660, f"DOCENTE: {docente.nombre_completo}")
-    p.drawString(50, 640, f"NÚMERO DE EMPLEADO: {docente.numero_empleado}")
-    p.drawString(50, 620, f"MOTIVO: {registro.motivo}")
-    p.drawString(50, 600, f"HORARIO: {registro.horario}")
+    # Estilos de párrafo
+    header_style = ParagraphStyle(
+        'header',
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        alignment=TA_CENTER,
+        wordWrap='LTR',
+        leading=12,
+    )
+    cell_style = ParagraphStyle(
+        'cell',
+        fontName='Helvetica',
+        fontSize=9,
+        alignment=TA_CENTER,
+        wordWrap='LTR',
+        leading=12,
+    )
+
+    col_widths = [130, 60, 80, 110, 130]
+
+    # Encabezados
+    headers = ["Docente", "Fecha", "Horario", "Motivo de falta", "Fecha y hora del reporte"]
     
-    p.line(100, 200, 250, 200)
-    p.drawCentredString(175, 185, "Firma Docente")
-    p.line(362, 200, 512, 200)
-    p.drawCentredString(437, 185, "Sello Dirección")
+    # Datos — convertir todo a string por si hay fechas u otros tipos
+    values = [
+        str(docente.nombre_completo),
+        str(registro.fecha_falta),
+        str(registro.horario),
+        str(registro.motivo),
+        str(registro.fecha_registro),
+    ]
+
+    data = [
+        [Paragraph(h, header_style) for h in headers],
+        [Paragraph(v, cell_style) for v in values],
+    ]
+    
+    t = Table(data, colWidths=col_widths)
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.white),  # encabezado guinda
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),                 # texto blanco en encabezado
+        ('TEXTCOLOR', (0,1), (-1,-1), colors.black),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('FONTSIZE', (0,0), (-1,-1), 9),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+        ('TOPPADDING', (0,0), (-1,-1), 10),
+    ]))
+    
+    table_width = sum(col_widths)
+    x_pos = (width - table_width) / 2
+    y_pos = height - 250
+
+    t.wrapOn(p, width, height)
+    t.drawOn(p, x_pos, y_pos)
 
     p.showPage()
     p.save()
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf")
+
+@app.get("/inasistencias/justificante/{inasistencia_id}")
+async def descargar_justificante(inasistencia_id: int, db: Session = Depends(get_db)):
+    registro = db.query(Inasistencia).filter(Inasistencia.id == inasistencia_id).first()
+    if not registro:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    if not registro.archivo:
+        raise HTTPException(status_code=404, detail="Este registro no tiene justificante")
+
+    archivo_original = fernet.decrypt(registro.archivo)
+
+    return StreamingResponse(
+        io.BytesIO(archivo_original),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=justificante_{inasistencia_id}.pdf"}
+    )
+
+
 
 @app.get("/personal/pdf/{docente_id}")
 async def generar_pdf_docente(docente_id: int, db: Session = Depends(get_db)):

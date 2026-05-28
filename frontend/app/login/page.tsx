@@ -57,31 +57,31 @@ export default function LoginSeguro() {
         <div className="p-8 space-y-6">
           {paso === 1 ? (
             <>
-              <input 
+              <input
                 className="w-full p-4 border-2 rounded-xl text-black"
                 placeholder="Correo o Usuario"
-                onChange={(e) => setForm({...form, usuario: e.target.value})}
+                onChange={(e) => setForm({ ...form, usuario: e.target.value })}
               />
-              <input 
+              <input
                 type="password"
                 className="w-full p-4 border-2 rounded-xl text-black"
                 placeholder="Contraseña"
-                onChange={(e) => setForm({...form, password: e.target.value})}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
               />
             </>
           ) : (
             <div className="text-center">
               <label className="text-xs font-bold text-[#800020]">CÓDIGO DE TU CELULAR (6 DÍGITOS)</label>
-              <input 
+              <input
                 maxLength={6}
                 className="w-full p-4 text-center text-3xl font-black tracking-widest text-[#001F3F] border-2 border-[#001F3F] rounded-xl"
                 placeholder="000000"
-                onChange={(e) => setForm({...form, token: e.target.value})}
+                onChange={(e) => setForm({ ...form, token: e.target.value })}
               />
             </div>
           )}
 
-          <button 
+          <button
             onClick={manejarLogin}
             disabled={loading}
             className="w-full py-4 bg-[#001F3F] text-white rounded-xl font-bold hover:bg-[#800020] transition-colors"

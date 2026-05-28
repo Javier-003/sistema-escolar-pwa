@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { UserPlus, CalendarX, BarChart3, BrainCircuit } from 'lucide-react';
+import { UserPlus, CalendarX, BarChart3, BrainCircuit, Users, LogOut } from 'lucide-react';
 
 // Definimos la estructura del evento para que TypeScript no se queje
 interface BeforeInstallPromptEvent extends Event {
@@ -55,11 +55,34 @@ export default function Home() {
     }
   };
 
+  const handleLogout = async () => {
+  try {
+    await fetch("http://localhost:8000/logout", { method: "POST" });
+  } catch (e) {
+    // ignorar error de red, igual limpiamos
+  }
+
+  // Borrar todo el storage
+  localStorage.clear();
+  sessionStorage.clear();
+
+  // Borrar cookies del navegador
+  document.cookie.split(";").forEach((c) => {
+    document.cookie = c
+      .replace(/^ +/, "")
+      .replace(/=.*/, `=;expires=${new Date().toUTCString()};path=/`);
+  });
+
+  // Redirigir al login
+  window.location.href = "/login"; // reemplaza con tu ruta
+};
+
   const modulos = [
     { title: "Registro de Personal", path: "/registro", icon: <UserPlus size={40} />, color: "bg-[#800020]" },
-    { title: "Inasistencias", path: "/inasistencias", icon: <CalendarX size={40} />, color: "bg-[#001F3F]" },
-    { title: "Estadísticas", path: "/estadisticas", icon: <BarChart3 size={40} />, color: "bg-[#800020]" },
-    { title: "Análisis IA", path: "/ia-analisis", icon: <BrainCircuit size={40} />, color: "bg-[#001F3F]" }
+    { title: "Directorio", path: "/directorio", icon: <Users size={40} />, color: "bg-[#001F3F]" },
+    { title: "Inasistencias", path: "/inasistencias", icon: <CalendarX size={40} />, color: "bg-[#800020]" },
+    { title: "Estadísticas", path: "/estadisticas", icon: <BarChart3 size={40} />, color: "bg-[#001F3F]" },
+    { title: "Análisis IA", path: "/ia-analisis", icon: <BrainCircuit size={40} />, color: "bg-[#800020]" }
   ];
 
   // Mientras verifica autenticación, no mostrar nada
@@ -76,6 +99,13 @@ export default function Home() {
         <p className="text-[#800020] font-medium uppercase tracking-widest text-sm">
           Panel de Gestión Administrativa
         </p>
+        <button
+          onClick={handleLogout}
+          className="absolute top-12 right-4 flex items-center gap-2 bg-[#001F3F] text-white px-4 py-2 rounded-md cursor-pointer hover:bg-[#003366] active:scale-95 transition-all duration-150"
+        >
+          <LogOut size={24} />
+          Cerrar Sesión
+        </button>
       </header>
 
       <main className="flex-1 max-w-6xl mx-auto py-16 px-8 sm:px-16">
