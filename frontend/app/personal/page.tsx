@@ -4,6 +4,7 @@ import axios from 'axios';
 import { Trash2, FileText, Search, Contact } from 'lucide-react'; 
 import Swal from 'sweetalert2';
 import API_URL from '@/lib/api';
+import { useRouter } from 'next/router';
 
 interface Docente {
   id: number;
@@ -16,6 +17,20 @@ interface Docente {
 export default function ListaPersonal() {
   const [docentes, setDocentes] = useState<Docente[]>([]);
   const [filtro, setFiltro] = useState('');
+  const router = useRouter();
+  const [autenticado, setAutenticado] = useState(false);
+  
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      router.replace('/login');
+    } else {
+      setAutenticado(true);
+    }
+  }, [router]);
+
+  if (!autenticado) return null; 
+   
 
   // Carga inicial de datos
   useEffect(() => {

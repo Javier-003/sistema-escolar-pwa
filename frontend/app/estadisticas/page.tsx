@@ -23,6 +23,19 @@ export default function Estadisticas() {
   const router = useRouter();
   const [chartData, setChartData] = useState<GraphConfig | null>(null);
 
+  const [autenticado, setAutenticado] = useState(false);
+ useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      router.replace('/login');
+    } else {
+      setAutenticado(true);
+    }
+  }, [router]);
+
+  if (!autenticado) return null; 
+ 
+
   // Paleta de colores predefinida (puedes agregar más si tienes muchas categorías)
   const colores = [
     '#800020', // Guinda

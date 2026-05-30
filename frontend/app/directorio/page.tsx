@@ -43,6 +43,19 @@ export default function Directorio() {
   const [selectedDocente, setSelectedDocente] = useState<Personal | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  const [autenticado, setAutenticado] = useState(false);
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      router.replace('/login');
+    } else {
+      setAutenticado(true);
+    }
+  }, [router]);
+
+  if (!autenticado) return null; 
+ 
+
   const fetchPersonal = async () => {
     try {
       const res = await axios.get(`${API_URL}/personal/listar`);

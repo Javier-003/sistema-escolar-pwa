@@ -4,6 +4,7 @@ import axios from 'axios';
 import Swal from 'sweetalert2';
 import { UserCog, Trash2, Edit3, Save, X, Search } from 'lucide-react';
 import API_URL from '@/lib/api';
+import { useRouter } from 'next/router';
 
 interface Docente {
   id: number;
@@ -16,7 +17,21 @@ export default function GestionPersonal() {
   const [busqueda, setBusqueda] = useState('');
   const [editando, setEditando] = useState<number | null>(null);
   const [tempData, setTempData] = useState({ nombre_completo: '', numero_empleado: '' });
+  
 
+  const router = useRouter();
+  const [autenticado, setAutenticado] = useState(false);
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      router.replace('/login');
+    } else {
+      setAutenticado(true);
+    }
+  }, [router]);
+
+  if (!autenticado) return null; 
+ 
   const cargarPersonal = async () => {
     try {
       const res = await axios.get(`${API_URL}/personal/listar`);

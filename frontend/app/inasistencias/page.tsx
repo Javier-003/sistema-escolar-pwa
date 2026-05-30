@@ -14,6 +14,19 @@ interface Docente {
 export default function RegistroInasistencias() {
   const router = useRouter();
   const [docentes, setDocentes] = useState<Docente[]>([]);
+  const [autenticado, setAutenticado] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      router.replace('/login');
+    } else {
+      setAutenticado(true);
+    }
+  }, [router]);
+
+  if (!autenticado) return null; 
+ 
   const [form, setForm] = useState({
     personal_id: '',
     fecha: '',
@@ -21,6 +34,8 @@ export default function RegistroInasistencias() {
     motivo: '',
     archivo: null as File | null
   });
+
+
 
   useEffect(() => {
     axios.get(`${API_URL}/personal/listar`)

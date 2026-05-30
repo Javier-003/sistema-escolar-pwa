@@ -8,6 +8,18 @@ import API_URL from '@/lib/api';
 
 export default function RegistroPersonal() {
   const router = useRouter();
+  const [autenticado, setAutenticado] = useState(false);
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      router.replace('/login');
+    } else {
+      setAutenticado(true);
+    }
+  }, [router]);
+
+  if (!autenticado) return null; 
+ 
   const [form, setForm] = useState({
     nombre: '',
     num_empleado: '',
