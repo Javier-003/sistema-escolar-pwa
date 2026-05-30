@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { BrainCircuit, ShieldAlert, Loader2, Target, Lightbulb, TrendingUp, ArrowLeft } from 'lucide-react';
@@ -23,6 +23,20 @@ export default function AnalisisIA() {
       setCargando(false);
     }
   };
+
+
+  const [autenticado, setAutenticado] = useState(false);
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      router.replace('/login');
+    } else {
+      setAutenticado(true);
+    }
+  }, [router]);
+
+  if (!autenticado) return null; 
+ 
 
   return (
     <div className="min-h-screen bg-zinc-50 p-12">
